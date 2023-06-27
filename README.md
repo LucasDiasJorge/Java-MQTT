@@ -12,6 +12,8 @@ sudo snap install mqttx
 
 TODO:
 
+- [x] Mqtt service as thread
+
 - [ ] DB writer
 
 Ref.:
