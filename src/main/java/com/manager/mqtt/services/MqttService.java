@@ -1,69 +1,57 @@
 package com.manager.mqtt.services;
 
-import org.eclipse.paho.client.mqttv3.*;
+import org.eclipse.paho.client.mqttv3.MqttClient;
+import org.eclipse.paho.client.mqttv3.MqttConnectOptions;
+import org.eclipse.paho.client.mqttv3.MqttException;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
-import java.util.Date;
+import java.util.List;
 
 @Component
-public class MqttService {
+public class MqttService{
 
-    @EventListener(ApplicationReadyEvent.class) // Substitute of extend thread and run in a while looping at main function
-    public void run() {
+    private final JdbcTemplate jdbcTemplate;
+
+    public MqttService(JdbcTemplate jdbcTemplate) {
+        this.jdbcTemplate = jdbcTemplate;
+    }
+
+    @EventListener(ApplicationReadyEvent.class)
+    public void mqtt() {
+
         System.out.println("MQTT is running ...");
 
+        List<String> portalMacs = jdbcTemplate.queryForList("SELECT mac_address FROM sys_portal WHERE deleted_at IS NOT NULL", String.class);
+
+        //System.out.println(portalMacs.toString());
+
+        MqttClient mqttClient = null;
+
         try {
+            mqttClient = new MqttClient("tcp://services.com", "HelloWorldSub");
+        } catch (MqttException e) {
+            throw new RuntimeException(e);
+        }
+
+        try {
+
             MqttConnectOptions options = new MqttConnectOptions();
             options.setUserName("your_username");
             options.setPassword("your_password".toCharArray());
 
-            MqttClient mqttClient = new MqttClient("tcp://services.com", "HelloWorldSub");
             mqttClient.connect(options);
-
-            mqttClient.subscribe("/testtopic/", 0);
-            mqttClient.setCallback(new MqttCallback() {
-                public void messageArrived(String topic, MqttMessage message) throws Exception {
-                    handleIncomingMessage(topic, message);
-                }
-
-                public void connectionLost(Throwable cause) {
-                    handleConnectionLost(cause);
-                }
-
-                public void deliveryComplete(IMqttDeliveryToken token) {
-                }
-            });
-
-            while (true) {
-                System.out.println("Listening ...");
-                MqttMessage message = new MqttMessage();
-                message.setPayload("{secret content}".getBytes());
-                mqttClient.publish("/testtopic/", message);
-
-                try {
-                    Thread.sleep(1000); // Delay for 1 second
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
-            }
 
         } catch (MqttException e) {
             throw new RuntimeException(e);
         }
-    }
 
-    private void handleIncomingMessage(String topic, MqttMessage message) {
-        Date time = new Date();
-        System.out.println("\nReceived a Message!" +
-                "\n\tTime:    " + time +
-                "\n\tTopic:   " + topic +
-                "\n\tMessage: " + new String(message.getPayload()) +
-                "\n\tQoS:     " + message.getQos() + "\n");
-    }
+        for (String mac : portalMacs) {
 
-    private void handleConnectionLost(Throwable cause) {
-        System.out.println("Connection to Solace messaging lost!" + cause.getMessage());
+            new MqttClientService(mac, mqttClient).start();
+            System.out.println("others");
+        }
     }
 }
